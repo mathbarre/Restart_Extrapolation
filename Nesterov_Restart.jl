@@ -384,14 +384,22 @@ beta = eigen(A).values[end]
 tol = 1e-10
 max_iter = 10000
 
+rho = 0.01
+
+alpha = eigen(A).values[1]
+beta = eigen(A).values[end]
+tol = 1e-10
+max_iter = 10000
+
 rank_eps = 1
-gamma = 1.0
+gamma = 3.0
 no_restart(last,funval,x,eps) = false
 restart_extra(last,funval,x,eps) = restart_extra_eps_algo(Int64(last),funval,x,eps,rank_eps)
+restart_const(last,funval,x,eps) = (mod(length(funval),10) == 0)
 
-
-(X,duals,funval) = CovSelect(tol,0.5*alpha,2*beta,rho,B,max_iter)
-(X_,duals_,funval_) = CovSelect(tol,0.5*alpha,2*beta,rho,B,max_iter)
+(X,duals,funval,r,e) = CovSelect(tol,0.5*alpha,2*beta,rho,B,max_iter,no_restart,false,0.0)
+(X_,duals_,funval_,r_,e_) = CovSelect(tol,0.5*alpha,2*beta,rho,B,max_iter,restart_extra,true,0.0)
+(X__,duals__,funval__,r__,e__) = CovSelect(tol,0.5*alpha,2*beta,rho,B,max_iter,restart_const,false,0.0)
 
 #thresh(X) = min.(max.((abs.(X) .> 1e0) .* X,-2.0),4.0) 
 thresh(X) = X
@@ -401,4 +409,5 @@ figure()
 imshow(thresh(inv(B)),cmap="Greys")
 figure()
 imshow(thresh(X),cmap="Greys")
-
+figure()
+imshow(thresh(X_),cmap="Greys")
