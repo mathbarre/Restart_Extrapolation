@@ -30,13 +30,13 @@ end
 function restart_mono(last,funval,x,eps)::Bool
    return length(funval)>=2 && funval[end-1]<funval[end]
 end
-function restart_extra_eps_algo(last::Int64,funval::Array{Float64,1},x::Union{Array{Float64,1},Array{Float64,2}},eps::Float64,rank::Int64)::Tuple{Bool,Float64}
+function restart_extra_eps_algo(last::Int64,funval::Array{Float64,1},x::Union{Array{Float64,1},Array{Float64,2}},eps::Float64,rank::Int64,max_length_btw_restarts::Int64)::Tuple{Bool,Float64}
     current_funval = funval[last:2:end]
-    if length(current_funval) >= 2*rank+1
+    if length(current_funval) >= max(2*rank+1,max_length_btw_restarts)
             extra = eps_algo(current_funval[(end-2*rank):end],rank)
             return (funval[end]-extra[1] < eps && extra[1] < minimum(funval),min(extra[1],minimum(funval)))
     else 
-        return (false,-Inf)
+        return (false,minimum(funval))
     end
 end
 

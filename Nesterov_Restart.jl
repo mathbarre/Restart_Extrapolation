@@ -76,7 +76,8 @@ params = parameters(x0,0.0,1/L,beta,max_iter,gamma)
 no_restart(last,funval,x,eps) = false
 
 rank_eps = 3;
-restart_extra(last,funval,x,eps) = restart_extra_eps_algo(Int64(last),funval,x,eps,rank_eps)
+max_length_btw_restart = 50
+restart_extra(last,funval,x,eps) = restart_extra_eps_algo(Int64(last),funval,x,eps,rank_eps,max_length_btw_restart)
 
 params_bis = parameters(x0,0.0,1/L,beta,2*max_iter,gamma)
 out = Nesterov_Acc(f,params_bis,restart_mono,false)
@@ -148,7 +149,8 @@ x0 = ones(n)
 params_fista = parameters(x0,0.0,1/L,0.0,max_iter,gamma)
 
 rank_eps = 1;
-restart_extra(last,funval,x,eps) = restart_extra_eps_algo(Int64(last),funval,x,eps,rank_eps)
+max_length_btw_restart = 50
+restart_extra(last,funval,x,eps) = restart_extra_eps_algo(Int64(last),funval,x,eps,rank_eps,max_length_btw_restart)
 
 params_max = parameters(x0,0.0,1/L,0.0,2*max_iter,gamma)
 out = Fista(fun_lasso,params_max,restart_mono,false)
@@ -325,12 +327,13 @@ x0 = randn(m,n)
 no_restart(last,funval,x,eps) = false
 
 rank_eps = 1
+max_length_btw_restart = 50
 max_iter = 2000;
 gamma = 3.0
 L = 1.0
 beta = -1.0
 fun_mtx_UFG = functional(fun_mtx,tr_norm,grad_mtx,prox_tr,argmin_tr,normfro)
-restart_extra(last,funval,x,eps) = restart_extra_eps_algo(Int64(last),funval,x,eps,rank_eps)
+restart_extra(last,funval,x,eps) = restart_extra_eps_algo(Int64(last),funval,x,eps,rank_eps,max_length_btw_restart)
 params = parameters(x0,0.0,1/L,beta,max_iter,gamma)
 params_max = parameters(x0,0.0,1/L,beta,10*max_iter,gamma)
 out = AccGradientMtx(fun_mtx_UFG,params_max,no_restart,false)
@@ -392,9 +395,10 @@ tol = 1e-10
 max_iter = 10000
 
 rank_eps = 1
-gamma = 3.0
+max_length_btw_restart = 50
+gamma = 1.0
 no_restart(last,funval,x,eps) = false
-restart_extra(last,funval,x,eps) = restart_extra_eps_algo(Int64(last),funval,x,eps,rank_eps)
+restart_extra(last,funval,x,eps) = restart_extra_eps_algo(Int64(last),funval,x,eps,rank_eps,max_length_btw_restart)
 restart_const(last,funval,x,eps) = (mod(length(funval),10) == 0)
 
 (X,duals,funval,r,e) = CovSelect(tol,0.5*alpha,2*beta,rho,B,max_iter,no_restart,false,0.0)
