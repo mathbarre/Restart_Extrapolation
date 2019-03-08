@@ -1,5 +1,5 @@
 
-push!(LOAD_PATH, "/Users/mathieubarre/Documents/These/Polyak_step/") #replace it with our local path to the folder containing Restart_Algo.jl and restart_strategies.jl
+push!(LOAD_PATH, "/Users/mathieubarre/Documents/These/Restart_Extrapolation/") #replace it with our local path to the folder containing Restart_Algo.jl and restart_strategies.jl
 using LinearAlgebra
 using Restart_Algo
 using restart_strategies
@@ -54,7 +54,7 @@ beta_star = (sqrt(L)-sqrt(mu))/(sqrt(L)+sqrt(mu))
 beta = -1.0
 #beta = 0.5*1+0.5*beta_star
 max_iter = 10000
-gamma = 2.0
+gamma = 5.0
 #y = randn(50)
 fun(x) = begin
     return 0.5*(A*x-y)'*(A*x-y)
@@ -76,7 +76,7 @@ params = parameters(x0,0.0,1/L,beta,max_iter,gamma)
 no_restart(last,funval,x,eps) = false
 
 rank_eps = 3;
-max_length_btw_restart = 50
+max_length_btw_restart = 10
 restart_extra(last,funval,x,eps) = restart_extra_eps_algo(Int64(last),funval,x,eps,rank_eps,max_length_btw_restart)
 
 params_bis = parameters(x0,0.0,1/L,beta,2*max_iter,gamma)
@@ -148,8 +148,8 @@ fun_lasso = functional(f_,g,grad_f_lasso,prox_g,null,norm)
 x0 = ones(n)
 params_fista = parameters(x0,0.0,1/L,0.0,max_iter,gamma)
 
-rank_eps = 1;
-max_length_btw_restart = 50
+rank_eps = 3;
+max_length_btw_restart = 1
 restart_extra(last,funval,x,eps) = restart_extra_eps_algo(Int64(last),funval,x,eps,rank_eps,max_length_btw_restart)
 
 params_max = parameters(x0,0.0,1/L,0.0,2*max_iter,gamma)
@@ -200,7 +200,7 @@ gamma = 2.0
 max_iter = 10000
 params_svm = parameters(x0,0.0,1/L,0.0,max_iter,gamma)
 
-rank_eps = 1;
+rank_eps = 3;
 
 params_max = parameters(x0,0.0,1/L,0.0,2*max_iter,gamma)
 out = Fista(fun_svm,params_max,restart_mono,false)
@@ -326,8 +326,8 @@ x0 = randn(m,n)
 
 no_restart(last,funval,x,eps) = false
 
-rank_eps = 1
-max_length_btw_restart = 50
+rank_eps = 3
+max_length_btw_restart = 1
 max_iter = 2000;
 gamma = 3.0
 L = 1.0
@@ -376,30 +376,23 @@ idx_obs = sample(1:(n*n),nb_obs)
 A[idx_obs] = sign.(4*rand(nb_obs).-1)
 A = A'+A
 
-sigma = 0.15
+sigma = 0.2
 V = rand(n,n)
 B = inv(A) + sigma*(V+V')/2
 
-rho = 0.001
+rho = 0.1
 
 alpha = eigen(A).values[1]
 beta = eigen(A).values[end]
-tol = 1e-10
-max_iter = 10000
+tol = 1e0
+max_iter = 2000
 
-rho = 0.01
-
-alpha = eigen(A).values[1]
-beta = eigen(A).values[end]
-tol = 1e-10
-max_iter = 10000
-
-rank_eps = 1
-max_length_btw_restart = 50
+rank_eps = 3
+max_length_btw_restart = 1
 gamma = 1.0
 no_restart(last,funval,x,eps) = false
 restart_extra(last,funval,x,eps) = restart_extra_eps_algo(Int64(last),funval,x,eps,rank_eps,max_length_btw_restart)
-restart_const(last,funval,x,eps) = (mod(length(funval),10) == 0)
+restart_const(last,funval,x,eps) = (mod(length(funval),1000) == 0)
 
 (X,duals,funval,r,e) = CovSelect(tol,0.5*alpha,2*beta,rho,B,max_iter,no_restart,false,0.0)
 (X_,duals_,funval_,r_,e_) = CovSelect(tol,0.5*alpha,2*beta,rho,B,max_iter,restart_extra,true,0.0)
@@ -415,3 +408,11 @@ figure()
 imshow(thresh(X),cmap="Greys")
 figure()
 imshow(thresh(X_),cmap="Greys")
+
+
+figure()
+plot(funval)
+plot(funval_)
+plot(funval__)
+plot(e_)
+

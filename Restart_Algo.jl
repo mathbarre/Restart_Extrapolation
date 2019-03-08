@@ -1,6 +1,6 @@
 module Restart_Algo
-
-export functional,parameters,output,Nesterov_Acc,Fista,UFastGradient,AccGradientMtx
+using LinearAlgebra
+export functional,parameters,output,Nesterov_Acc,Fista,UFastGradient,AccGradientMtx,CovSelect
 
 struct functional
     f::Function #smooth function value
@@ -10,7 +10,6 @@ struct functional
     argmin_phi::Function #argminphi resume to prox of g when where in the euclidean setup
     pb_norm::Function #pb_norm is the norm in which the strong convexityt of the function in the bregman divergence is considered
 end
-
 
 struct parameters
     x0::Union{Array{Float64,1},Array{Float64,2}} #initial value
@@ -263,21 +262,23 @@ function CovSelect(tol,alpha,beta,rho,Sigma,max_iter,restart_strategy,extra,gamm
     D2 = n^2/2
     M = 1/alpha^2
     L = M + D2*rho^2/(2*tol)
-    sum_grad = zeros(n,n)
+    sum_grad = inv(X)
     sigma1 = 1/beta^2
     U_hat = zeros(n,n)
-    U = max.(min.(X*rho^2*2*D2/tol,rho),-rho)
+    U0 = zeros(n,n)
+    U = max.(min.((X)*rho^2*2*D2/tol,rho),-rho)
     dual_vals = [Inf]
     funval = [-log(det(X)) + (Sigma[:]')*X[:] + rho*sum(abs.(X))]
     Y = Array(X)
     last_restart = 1
     restarts = []
-    tol = 10*funval[1]
+    #tol = 10*funval[1]
     extras = []
-    for i = 0:(max_iter-1) 
+    k = 0
+    for i = 1:(max_iter) 
         #step 1
         gradf = -inv(X) + Sigma + U
-        sum_grad = sum_grad + (i+1)/2*gradf
+        sum_grad = sum_grad + (k+1)/2*gradf
 
         #step 2
         G = X - 1/L*gradf
@@ -296,9 +297,9 @@ function CovSelect(tol,alpha,beta,rho,Sigma,max_iter,restart_strategy,extra,gamm
         Z = V_S*Diagonal(lambdas_S)*V_S'
 
         #step 4
-        X = 2/(i+3)*Z + (i+1)/(i+3)*Y
-        U = max.(min.(X*rho^2*2*D2/tol,rho),-rho)
-        U_hat = (i*U_hat+2*U)/(i+2)
+        X = 2/(k+3)*Z + (k+1)/(k+3)*Y
+        U = max.(min.((X)*rho^2*2*D2/tol,rho),-rho)
+        U_hat = (k*U_hat+2*U)/(k+2)
 
         #step 5
         eig_phi = eigen(inv(Sigma+U_hat))
@@ -310,7 +311,7 @@ function CovSelect(tol,alpha,beta,rho,Sigma,max_iter,restart_strategy,extra,gamm
         fun = -log(det(Y)) + (Sigma[:]')*Y[:] + rho*sum(abs.(Y))
         dual_gap = fun  - phi 
 
-
+        k +=1
 
         dual_vals = [dual_vals;dual_gap]
         funval = [funval;fun]
@@ -321,15 +322,14 @@ function CovSelect(tol,alpha,beta,rho,Sigma,max_iter,restart_strategy,extra,gamm
             (b,ex) = restart_strategy(last_restart,funval,Y,tol)
         end
         if b
+            k = 0
             last_restart = i
             X = Array(Y)
             restarts = [restarts;i]
             tol *= exp(-gamma)
             L = M + D2*rho^2/(2*tol)
-            sum_grad = zeros(n,n)
-            sigma1 = 1/beta^2
-            U_hat = zeros(n,n)
-            U = max.(min.(X*rho^2*2*D2/tol,rho),-rho)
+            sum_grad = inv(X)
+            U = max.(min.((X)*rho^2*2*D2/tol,rho),-rho)
         end
         extras = [extras;ex]
         #if dual_gap < tol
