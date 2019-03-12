@@ -228,8 +228,16 @@ function AccGradientMtx(f::functional,params::parameters,restart_strategy::Funct
     restarts = []
     eps = 10*f.f(x)
     extras = []
+    step = params.step
     for k in 1:params.n_iter
-        x_ = f.prox_g(y - params.step*f.grad_f(y),params.step)
+
+        #adapt_step = true
+        #step  *= 1.5^2
+        #while adapt_step
+            #step /= 1.5
+            x_ = f.prox_g(y - step*f.grad_f(y),params.step)
+            #adapt_step = (f.f(x_)  > (f.f(y) +(f.grad_f(y)[:]')*(x_[:] - y[:]) + 0.5/step*norm(x_[:]-y[:])^2))
+        #end
         t_ = 0.5*(1+sqrt(1+4*t^2))
         beta = (t-1)/t_
         y = x_ +beta*(x_-x)
@@ -248,6 +256,7 @@ function AccGradientMtx(f::functional,params::parameters,restart_strategy::Funct
             y = Array(x_)
             restarts = [restarts;k]
             eps *= exp(-params.gamma)
+            step = params.step
         end
         extras = [extras;ex]
     end
@@ -258,14 +267,14 @@ end
 
 function CovSelect(tol,alpha,beta,rho,Sigma,max_iter,restart_strategy,extra,gamma)
     n = size(Sigma,1)
-    X = Array(beta*Matrix(I,n,n))
+    X0 = Array(beta*Matrix(I,n,n))
+    X = Array(X0) 
     D2 = n^2/2
     M = 1/alpha^2
     L = M + D2*rho^2/(2*tol)
     sum_grad = inv(X)
     sigma1 = 1/beta^2
     U_hat = zeros(n,n)
-    U0 = zeros(n,n)
     U = max.(min.((X)*rho^2*2*D2/tol,rho),-rho)
     dual_vals = [Inf]
     funval = [-log(det(X)) + (Sigma[:]')*X[:] + rho*sum(abs.(X))]
@@ -329,6 +338,107 @@ function CovSelect(tol,alpha,beta,rho,Sigma,max_iter,restart_strategy,extra,gamm
             tol *= exp(-gamma)
             L = M + D2*rho^2/(2*tol)
             sum_grad = inv(X)
+            U = max.(min.((X)*rho^2*2*D2/tol,rho),-rho)
+        end
+        extras = [extras;ex]
+        #if dual_gap < tol
+        #    break
+        #end
+    end
+    return (Y,dual_vals,funval,restarts,extras)
+
+
+end
+
+
+function CovSelectOtherProx(tol,alpha,beta,rho,Sigma,max_iter,restart_strategy,extra,gamma)
+    n = size(Sigma,1)
+    X0 = Array(beta*Matrix(I,n,n))
+    X = Array(X0) 
+    D2 = n^2/2
+    M = 1/alpha^2
+    L = M + D2*rho^2/(2*tol)
+    sum_grad = zeros(n,n)
+    sigma1 = 1.0
+    U_hat = zeros(n,n)
+    U = max.(min.((X)*rho^2*2*D2/tol,rho),-rho)
+    dual_vals = [Inf]
+    funval = [-log(det(X)) + (Sigma[:]')*X[:] + rho*sum(abs.(X))]
+    Y = Array(X)
+    last_restart = 1
+    restarts = []
+    extras = []
+    k = 0
+    f(Y) = -log(det(Y)) + (Sigma[:]')*Y[:] + rho*sum(abs.(Y))
+    huber(x,e) = begin
+        mu = e/(2*D2*rho)
+        if abs(x) <= mu 
+           return rho*x^2/(2*mu)
+        else
+           return rho*(abs(x) - mu/2)
+        end
+    end
+    for i = 1:(max_iter) 
+        #step 1
+        gradf = -inv(X) + Sigma + U
+        sum_grad = sum_grad + (k+1)/2*gradf
+
+        #step 2
+        adapt_step = true
+        L /= 4
+        while adapt_step
+            L *= 2
+            G = X - 1/L*gradf
+            eig_G = eigen(G)
+            V = eig_G.vectors
+            gammas = eig_G.values
+            lambdas = min.(max.(gammas,alpha),beta)
+            Y = V*Diagonal(lambdas)*V'
+            adapt_step = ((-log(det(Y)) + (Sigma[:]')*Y[:] + sum(huber.(Y,tol))) > (-log(det(X)) + (Sigma[:]')*X[:] + sum(huber.(X,tol)) + gradf[:]'*(Y[:]-X[:]) +0.5*L*norm(Y[:]-X[:])^2))
+        end
+
+        #step 3
+        S = X0 - sigma1/L*sum_grad
+        eig_S = eigen(S)
+        sigmas = eig_S.values
+        V_S = eig_S.vectors
+        lambdas_S = min.(max.(sigmas,alpha),beta)
+        Z = V_S*Diagonal(lambdas_S)*V_S'
+
+        #step 4
+        X = 2/(k+3)*Z + (k+1)/(k+3)*Y
+        U = max.(min.((X)*rho^2*2*D2/tol,rho),-rho)
+        U_hat = (k*U_hat+2*U)/(k+2)
+
+        #step 5
+        eig_phi = eigen(inv(Sigma+U_hat))
+        sigmas_phi = eig_phi.values
+        V_phi = eig_phi.vectors
+        lambdas_phi = min.(max.(sigmas_phi,alpha),beta)
+        U_ = V_phi*Diagonal(lambdas_phi)*V_phi'
+        phi = -log(det(U_))+(Sigma[:]+U_hat[:])'*(U_[:])
+        
+        dual_gap = f(Y)  - phi 
+
+        k +=1
+
+        dual_vals = [dual_vals;dual_gap]
+        funval = [funval;f(Y)]
+        ex = -Inf
+        if !extra
+            b = restart_strategy(last_restart,funval,Y,tol)
+        else 
+            (b,ex) = restart_strategy(last_restart,funval,Y,tol)
+        end
+        if b
+            k = 0
+            last_restart = i
+            X = Array(Y)
+            X0 = Array(X)
+            restarts = [restarts;i]
+            tol *= exp(-gamma)
+            L = M + D2*rho^2/(2*tol)
+            sum_grad = zeros(n,n)
             U = max.(min.((X)*rho^2*2*D2/tol,rho),-rho)
         end
         extras = [extras;ex]

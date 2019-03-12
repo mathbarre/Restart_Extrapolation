@@ -315,7 +315,7 @@ end
 prox_tr(X,l) = begin
     F = svd(X)
     S = F.S
-    S = max.(0,S .- lambda*l)
+    S = max.(1e-16,S .- lambda*l)
     return F.U*Diagonal(S)*F.V'
 end
 
@@ -330,7 +330,7 @@ rank_eps = 3
 max_length_btw_restart = 1
 max_iter = 2000;
 gamma = 3.0
-L = 1.0
+L = 2.0
 beta = -1.0
 fun_mtx_UFG = functional(fun_mtx,tr_norm,grad_mtx,prox_tr,argmin_tr,normfro)
 restart_extra(last,funval,x,eps) = restart_extra_eps_algo(Int64(last),funval,x,eps,rank_eps,max_length_btw_restart)
@@ -380,23 +380,23 @@ sigma = 0.2
 V = rand(n,n)
 B = inv(A) + sigma*(V+V')/2
 
-rho = 0.1
+rho = 0.2
 
 alpha = eigen(A).values[1]
 beta = eigen(A).values[end]
-tol = 1e0
-max_iter = 2000
+tol = 1e-3
+max_iter = 50000
 
 rank_eps = 3
 max_length_btw_restart = 1
 gamma = 1.0
 no_restart(last,funval,x,eps) = false
 restart_extra(last,funval,x,eps) = restart_extra_eps_algo(Int64(last),funval,x,eps,rank_eps,max_length_btw_restart)
-restart_const(last,funval,x,eps) = (mod(length(funval),1000) == 0)
+restart_const(last,funval,x,eps) = (mod(length(funval),500) == 0)
 
-(X,duals,funval,r,e) = CovSelect(tol,0.5*alpha,2*beta,rho,B,max_iter,no_restart,false,0.0)
-(X_,duals_,funval_,r_,e_) = CovSelect(tol,0.5*alpha,2*beta,rho,B,max_iter,restart_extra,true,0.0)
-(X__,duals__,funval__,r__,e__) = CovSelect(tol,0.5*alpha,2*beta,rho,B,max_iter,restart_const,false,0.0)
+(X,duals,funval,r,e) = CovSelectOtherProx(tol,0.5*alpha,2*beta,rho,B,max_iter,no_restart,false,0.0)
+(X_,duals_,funval_,r_,e_) = CovSelectOtherProx(tol,0.5*alpha,2*beta,rho,B,max_iter,restart_extra,true,0.0)
+(X__,duals__,funval__,r__,e__) = CovSelectOtherProx(tol,0.5*alpha,2*beta,rho,B,max_iter,restart_const,false,0.0)
 
 #thresh(X) = min.(max.((abs.(X) .> 1e0) .* X,-2.0),4.0) 
 thresh(X) = X
@@ -409,10 +409,17 @@ imshow(thresh(X),cmap="Greys")
 figure()
 imshow(thresh(X_),cmap="Greys")
 
+fstar = minimum([funval;funval_;funval__])
 
 figure()
-plot(funval)
-plot(funval_)
-plot(funval__)
-plot(e_)
+semilogy(funval.-fstar,label="no restart")
+semilogy(funval_.-fstar,label="restart extra")
+scatter(r_,funval_[r_].-fstar,color="tab:orange")
+semilogy(funval__.-fstar,label = "restart const")
+semilogy(abs.(e_.-fstar))
 
+figure()
+semilogy(duals,label="no restart")
+semilogy(duals_,label="restart extra")
+scatter(r_,duals_[r_],color="tab:orange")
+semilogy(duals__,label = "restart const")
