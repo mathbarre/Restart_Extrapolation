@@ -1,6 +1,6 @@
 module restart_strategies
 
-export restart_known_fstar,restart_mono,restart_extra_eps_algo
+export restart_known_fstar,restart_mono,restart_extra_eps_algo,no_restart
 
 function eps_algo(u,k)
     n = length(u)
@@ -22,7 +22,7 @@ function eps_algo(u,k)
     return res[1:(n-2*k)]
 end
 
-
+no_restart(last,funval,x,eps) = false
 
 function restart_known_fstar(last,funval,x,eps,fstar)::Bool
     return funval[end] - fstar < eps

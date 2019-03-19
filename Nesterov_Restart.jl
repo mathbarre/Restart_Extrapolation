@@ -20,10 +20,10 @@ end
 ##                                                                         ##
 #############################################################################
 
-n = 50
-A = rand(50,n)
-A = A'*A + 5e-3*Matrix(I,n,n)
-A = Diagonal(1:100:(900+n*100))
+# n = 50
+# A = rand(50,n)
+# A = A'*A + 5e-3*Matrix(I,n,n)
+# A = Diagonal(1:100:(200+n*100))
 # Sonar Dataset
 A = CSV.read("./sonar_zip/data/sonar_csv.csv")
 A = convert(Matrix,A)
@@ -48,13 +48,13 @@ y = convert(Array{Float64},y)
 L = opnorm(A'*A) #+2*0.1*(x_star'*x_star)^(2-1)
 mu = eigmin(A'*A) 
 x_star = randn(n)
-fstar = 2
+fstar = 1.0
 beta_star = (sqrt(L)-sqrt(mu))/(sqrt(L)+sqrt(mu))
 #beta_star = -1.0
-beta = -1.0
-#beta = 0.5*1+0.5*beta_star
+#beta = -1.0
+beta = 0.8*1+0.2*beta_star
 max_iter = 10000
-gamma = 5.0
+gamma = 4.0
 #y = randn(50)
 fun(x) = begin
     return 0.5*(A*x-y)'*(A*x-y)
@@ -71,9 +71,9 @@ zero_fun(x) = 0
 argminphi_quad(x_0,A,sum_grad) = x_0-sum_grad
 f = functional(fun,zero_fun,grad_f,null,argminphi_quad,norm)
 x0 =zeros(n)
-params = parameters(x0,0.0,1/L,beta,max_iter,gamma)
+params = parameters(x0,0.0,1/L,0.0,max_iter,gamma)
 
-no_restart(last,funval,x,eps) = false
+
 
 rank_eps = 3;
 max_length_btw_restart = 10
@@ -84,8 +84,7 @@ out = Nesterov_Acc(f,params_bis,restart_mono,false)
 out1 = Nesterov_Acc(f,params,no_restart,false)
 out3 = Nesterov_Acc(f,params,restart_mono,false)
 out4 = Nesterov_Acc(f,params,restart_extra,true)
-fstar = minimum([out.funval;out1.funval;out3.funval;out4.funval])
-restart_fstar(last,funval,x,eps) = restart_known_fstar(last,funval,x,eps,fstar)
+
 
 
 
@@ -95,6 +94,8 @@ out5 = UFastGradient(f,params_UFG,no_restart,false)
 out7 = UFastGradient(f,params_UFG,restart_extra,true)
 out8 = UFastGradient(f,params_UFG,restart_mono,false)
 fstar = minimum([out.funval;out1.funval;out3.funval;out4.funval;out5.funval;out7.funval;out8.funval])
+restart_fstar(last,funval,x,eps) = restart_known_fstar(last,funval,x,eps,fstar)
+
 out6 = UFastGradient(f,params_UFG,restart_fstar,false)
 out2 = Nesterov_Acc(f,params,restart_fstar,false)
 
@@ -111,7 +112,7 @@ plotf(out7,fstar,"Universal Fast Gradient Restart Extra","tab:pink")
 plotf(out8,fstar,"Universal Fast Gradient Restart Mono","blue")
 
 legend()
-
+semilogy((out7.extrapolation.-fstar),label="extra",color="black")
 
 
 
@@ -238,14 +239,16 @@ show()
 ##                                                                         ##
 #############################################################################
 
-lambda = 0.0
+lambda = 0.0001
 fun_logit(x) = sum(log.(1 .+ exp.(-y.*(A*x))))+0.5*lambda*x'*x
 grad_logit(x) = (sum(-(y.*A)'.*(exp.(-y.*(A*x))./(1 .+ exp.(-y.*(A*x))))',dims=2)')[:] +lambda*x
 argmin_phi_logit(x,A,grad) = x-grad
 fun_logit_UFG=functional(fun_logit,zero_fun,grad_logit,null,argmin_phi_logit,norm)
-
+rank_eps = 1;
+max_length_btw_restart = 1
+restart_extra(last,funval,x,eps) = restart_extra_eps_algo(Int64(last),funval,x,eps,rank_eps,max_length_btw_restart)
 x0 = zeros(n)
-gamma = 2.0
+gamma = 5.0
 max_iter = 20000
 beta= -1.0
 L = opnorm(A'*A)+lambda
@@ -262,7 +265,7 @@ out7 =UFastGradient(fun_logit_UFG,param_logit_UFG,restart_extra,true)
 fstar = minimum([out.funval;out1.funval;out2.funval;out5.funval;out4.funval;out6.funval;out7.funval])
 
 
-rank_eps = 1;
+
 restart_fstar(last,funval,x,eps) = restart_known_fstar(last,funval,x,eps,fstar)
 out3 = Nesterov_Acc(fun_logit_UFG,params,restart_fstar,false)
 out8 =UFastGradient(fun_logit_UFG,param_logit_UFG,restart_fstar,false)
@@ -315,7 +318,7 @@ end
 prox_tr(X,l) = begin
     F = svd(X)
     S = F.S
-    S = max.(1e-16,S .- lambda*l)
+    S = max.(0.0,S .- lambda*l)
     return F.U*Diagonal(S)*F.V'
 end
 
@@ -385,18 +388,21 @@ rho = 0.2
 alpha = eigen(A).values[1]
 beta = eigen(A).values[end]
 tol = 1e-3
-max_iter = 50000
+max_iter = 20000
 
 rank_eps = 3
 max_length_btw_restart = 1
-gamma = 1.0
+gamma = 2.0
 no_restart(last,funval,x,eps) = false
 restart_extra(last,funval,x,eps) = restart_extra_eps_algo(Int64(last),funval,x,eps,rank_eps,max_length_btw_restart)
-restart_const(last,funval,x,eps) = (mod(length(funval),500) == 0)
+restart_const(last,funval,x,eps) = (mod(length(funval),100) == 0)
 
-(X,duals,funval,r,e) = CovSelectOtherProx(tol,0.5*alpha,2*beta,rho,B,max_iter,no_restart,false,0.0)
-(X_,duals_,funval_,r_,e_) = CovSelectOtherProx(tol,0.5*alpha,2*beta,rho,B,max_iter,restart_extra,true,0.0)
-(X__,duals__,funval__,r__,e__) = CovSelectOtherProx(tol,0.5*alpha,2*beta,rho,B,max_iter,restart_const,false,0.0)
+(X,duals,funval,r,e) = CovSelectOtherProx(tol,0.5*alpha,2*beta,rho,B,max_iter,no_restart,false,gamma,false)
+(X_,duals_,funval_,r_,e_) = CovSelectOtherProx(tol,0.5*alpha,2*beta,rho,B,max_iter,restart_extra,true,gamma,false)
+(X__,duals__,funval__,r__,e__) = CovSelectOtherProx(tol,0.5*alpha,2*beta,rho,B,max_iter,restart_mono,false,gamma,false)
+fstar = minimum([funval;funval_;funval__])
+restart_fstar(last,funval,x,eps) = restart_known_fstar(last,funval,x,eps,fstar)
+(X___,duals___,funval___,r___,e___) = CovSelectOtherProx(tol,0.5*alpha,2*beta,rho,B,max_iter,restart_fstar,false,gamma,false)
 
 #thresh(X) = min.(max.((abs.(X) .> 1e0) .* X,-2.0),4.0) 
 thresh(X) = X
@@ -409,17 +415,24 @@ imshow(thresh(X),cmap="Greys")
 figure()
 imshow(thresh(X_),cmap="Greys")
 
-fstar = minimum([funval;funval_;funval__])
+
 
 figure()
 semilogy(funval.-fstar,label="no restart")
 semilogy(funval_.-fstar,label="restart extra")
 scatter(r_,funval_[r_].-fstar,color="tab:orange")
-semilogy(funval__.-fstar,label = "restart const")
+semilogy(funval__.-fstar,label = "restart mono")
+scatter(r__,funval__[r__].-fstar,color="tab:green")
+semilogy(funval___.-fstar,label = "restart f*")
+scatter(r___,funval___[r___].-fstar,color="tab:red")
 semilogy(abs.(e_.-fstar))
+legend()
 
 figure()
 semilogy(duals,label="no restart")
 semilogy(duals_,label="restart extra")
 scatter(r_,duals_[r_],color="tab:orange")
-semilogy(duals__,label = "restart const")
+semilogy(duals__,label = "restart mono")
+scatter(r__,duals__[r__],color="tab:green")
+semilogy(duals___,label="restart f*")
+scatter(r___,duals___[r___],color="tab:red")

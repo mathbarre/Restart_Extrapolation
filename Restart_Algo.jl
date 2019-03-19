@@ -147,7 +147,7 @@ function UFastGradient(f::functional,params::parameters,restart_strategy::Functi
         sum_gradient = zeros(size(x_0,1),size(x_0,2)) #play the role of \phi when euclidiean setup
     end
     funval = [f.f(x_0)+f.g(x_0)]
-    extras=[]
+    extras=[f.f(x_0)+f.g(x_0)]
     last_restart=1
     restarts = []
     eps = 10*(f.f(x_0)+f.g(x_0))
@@ -351,7 +351,7 @@ function CovSelect(tol,alpha,beta,rho,Sigma,max_iter,restart_strategy,extra,gamm
 end
 
 
-function CovSelectOtherProx(tol,alpha,beta,rho,Sigma,max_iter,restart_strategy,extra,gamma)
+function CovSelectOtherProx(tol,alpha,beta,rho,Sigma,max_iter,restart_strategy,extra,gamma,continuation)
     n = size(Sigma,1)
     X0 = Array(beta*Matrix(I,n,n))
     X = Array(X0) 
@@ -363,13 +363,6 @@ function CovSelectOtherProx(tol,alpha,beta,rho,Sigma,max_iter,restart_strategy,e
     U_hat = zeros(n,n)
     U = max.(min.((X)*rho^2*2*D2/tol,rho),-rho)
     dual_vals = [Inf]
-    funval = [-log(det(X)) + (Sigma[:]')*X[:] + rho*sum(abs.(X))]
-    Y = Array(X)
-    last_restart = 1
-    restarts = []
-    extras = []
-    k = 0
-    f(Y) = -log(det(Y)) + (Sigma[:]')*Y[:] + rho*sum(abs.(Y))
     huber(x,e) = begin
         mu = e/(2*D2*rho)
         if abs(x) <= mu 
@@ -378,6 +371,15 @@ function CovSelectOtherProx(tol,alpha,beta,rho,Sigma,max_iter,restart_strategy,e
            return rho*(abs(x) - mu/2)
         end
     end
+    f(Y) = -log(det(Y)) + (Sigma[:]')*Y[:] + sum(huber.(Y,tol))
+    #f(Y) = -log(det(Y)) + (Sigma[:]')*Y[:] + rho*sum(abs.(Y))
+    funval = [f(X)]
+    Y = Array(X)
+    eps = 10*funval[end]
+    last_restart = 1
+    restarts = []
+    extras = [funval[end]]
+    k = 0
     for i = 1:(max_iter) 
         #step 1
         gradf = -inv(X) + Sigma + U
@@ -394,7 +396,7 @@ function CovSelectOtherProx(tol,alpha,beta,rho,Sigma,max_iter,restart_strategy,e
             gammas = eig_G.values
             lambdas = min.(max.(gammas,alpha),beta)
             Y = V*Diagonal(lambdas)*V'
-            adapt_step = ((-log(det(Y)) + (Sigma[:]')*Y[:] + sum(huber.(Y,tol))) > (-log(det(X)) + (Sigma[:]')*X[:] + sum(huber.(X,tol)) + gradf[:]'*(Y[:]-X[:]) +0.5*L*norm(Y[:]-X[:])^2))
+            adapt_step = (f(Y) > f(X) + gradf[:]'*(Y[:]-X[:]) +0.5*L*norm(Y[:]-X[:])^2)
         end
 
         #step 3
@@ -418,7 +420,7 @@ function CovSelectOtherProx(tol,alpha,beta,rho,Sigma,max_iter,restart_strategy,e
         U_ = V_phi*Diagonal(lambdas_phi)*V_phi'
         phi = -log(det(U_))+(Sigma[:]+U_hat[:])'*(U_[:])
         
-        dual_gap = f(Y)  - phi 
+        dual_gap =  -log(det(Y)) + (Sigma[:]')*Y[:] + rho*sum(abs.(Y))- phi 
 
         k +=1
 
@@ -426,9 +428,12 @@ function CovSelectOtherProx(tol,alpha,beta,rho,Sigma,max_iter,restart_strategy,e
         funval = [funval;f(Y)]
         ex = -Inf
         if !extra
-            b = restart_strategy(last_restart,funval,Y,tol)
+            b = restart_strategy(last_restart,funval,Y,eps)
         else 
-            (b,ex) = restart_strategy(last_restart,funval,Y,tol)
+            (b,ex) = restart_strategy(last_restart,funval,Y,eps)
+        end
+        if continuation
+            b = dual_gap < tol
         end
         if b
             k = 0
@@ -436,8 +441,9 @@ function CovSelectOtherProx(tol,alpha,beta,rho,Sigma,max_iter,restart_strategy,e
             X = Array(Y)
             X0 = Array(X)
             restarts = [restarts;i]
-            tol *= exp(-gamma)
-            L = M + D2*rho^2/(2*tol)
+            eps *= exp(-gamma)
+            #tol *= exp(-gamma)
+            #L = M + D2*rho^2/(2*tol)
             sum_grad = zeros(n,n)
             U = max.(min.((X)*rho^2*2*D2/tol,rho),-rho)
         end
