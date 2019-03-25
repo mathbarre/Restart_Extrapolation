@@ -2,6 +2,13 @@ module Restart_Algo
 using LinearAlgebra
 export functional,parameters,output,Nesterov_Acc,Fista,UFastGradient,AccGradientMtx,CovSelect
 
+struct Infos
+    funvals::Array{Float64,1}
+    grads::Array{Float64,2} #find a good type for matrices
+    xs::Array{Float64,2} #same
+    restarts::Array{Int64,1}
+end
+
 struct functional
     f::Function #smooth function value
     g::Function #nonsmooth function value
@@ -50,6 +57,8 @@ function Nesterov_Acc(f::functional,params::parameters,restart_strategy::Functio
     x_ = Array(x)
     y = Array(params.x0)
     funval = [f.f(x)+f.g(x)]
+    grads = f.grad_f(x)
+    xs = x
     last_restart = Int64(1)
     restarts = []
     extras=[]
@@ -67,16 +76,24 @@ function Nesterov_Acc(f::functional,params::parameters,restart_strategy::Functio
         x = Array(x_)
         theta = theta_
         funval = [funval;f.f(x)+f.g(x)]
+        grads = [grads f.grad_f(x)]
+        xs = [xs x]
+        info = Infos(funval,grads,xs,restarts)
         ex = -Inf
         if !extra
-            b = restart_strategy(last_restart,funval,x,eps)
+            b = restart_strategy(info,eps)
         else 
-            (b,ex) = restart_strategy(last_restart,funval,x,eps)
+            (b,ex) = restart_strategy(info,eps)
         end
+        # if !extra
+        #     b = restart_strategy(last_restart,funval,x,eps)
+        # else 
+        #     (b,ex) = restart_strategy(last_restart,funval,x,eps)
+        # end
         if b
             last_restart = k
             theta = 1
-            y = Array(x_)
+            y = Array(x)
             restarts = [restarts;k]
             eps *= exp(-params.gamma)
             
